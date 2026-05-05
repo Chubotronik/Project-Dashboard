@@ -1,32 +1,44 @@
-# Virtual environment
+# --- Virtual environment ---
 venv/
+.venv/
 
-# Python cache
+# --- Python ---
 __pycache__/
 *.pyc
 *.pyo
 *.pyd
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
 
-# Jupyter
+# --- Jupyter ---
 .ipynb_checkpoints/
 
-# Environment variables
+# --- Secrets & env ---
 .env
-
-# Kaggle credentials
-.kaggle/
+.env.*
+!.env.example
+*.key
+secrets.json
 kaggle.json
+.kaggle/
 
-# Data folder (raw datasets)
-data/
+# --- Data ---
+# Ignore raw scraped/API dumps (they're reproducible from the fetch scripts)
+data/raw/*
+!data/raw/.gitkeep
+# Track processed datasets that are small + reproducible
+# (override here if you want to ignore those too)
 
-# Streamlit cache
-.streamlit/
+# --- Caches ---
+.cache/
+*.cache
+.streamlit/secrets.toml
 
-# OS files
-.DS_Store
-Thumbs.db
-
-# IDE
+# --- IDE / OS ---
 .vscode/
 .idea/
+.DS_Store
+Thumbs.db
+desktop.ini

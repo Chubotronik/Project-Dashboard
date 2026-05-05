@@ -1,0 +1,40 @@
+I want to create a streamlit + plotly dashboard to help me with pokemon champions. 
+this project can later develop into a deep learning project to create more personalized predictors. 
+However the first part of the project will focus on creating a dashboard that describes the current 
+state of the vgc. This is a learning project: unless I specify it, 
+never give me direct coding answers, just help me with the skeleton of the code
+
+note that this project starts with pokemon champions, but if there are no available sites with data form
+the game, just pivot to pokemon showdown (obviously notice me, and do it only if there are no available api sources for champions)
+
+You have to do the following:
+-1 cleanup the project folder form old files and dataset. 
+only keep the git repo and the venv, but uninstall all the packages that are useless and install the ones that are missing
+
+-2 act as a planner and write a claude.md file to instruct yourself in the future with this project.
+the goal is to achieve a streamlit dashboard that shows pokemon usage, win percantage, likely teams, 
+matchup results stats and movesheets for selected pokemons
+
+-3 Do not realize the project, instead write an instructions.md file to teach me how to achieve it. 
+The instructions must divide the project in steps to achieve the goal and each step must be written 
+so that first is shown the task and generic instructions on how to solve similar tasks.
+
+for example let's say I want to learn to do an API call to gather the data for the research. 
+the instructions you should give me would be likely
+
+"first go on sites that contain available data for pokemon champions (i.e. ABC, DEF...) and look for 
+an API keys. To use api keys you must insert them into a json file in the correct folder and then call them
+in the python script you're using"
+
+then you can give me hints that MUST BE CLICKED TO BE ACCESSED 
+"this site's API key can be found in this specific position, and you can create a dataframe using this function"
+
+and finally also write your solution to the task.
+
+
+
+the topics I want to tackle are
+-fetching data using api
+-creating a streamlit dashboard
+-extracting useful info from the pokemon data
+-visualize them wonderfully in an interactive dashboard
