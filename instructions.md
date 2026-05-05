@@ -10,6 +10,263 @@ A step-by-step path from "empty repo" to "interactive Streamlit dashboard."
 
 ---
 
+## Chapter 0 — Project fundamentals
+
+Before writing code, understand how professional projects are **structured**,
+**approached**, and **collaborated on**. This chapter sets the mindset; later
+chapters hands-on practice it.
+
+### The project structure at a glance
+
+```
+app.py                    ← Streamlit entrypoint (the UI)
+.env                      ← Secrets & config (never commit; use .env.example as template)
+.env.example              ← Template showing which .env variables exist
+.git/
+  ...                     ← Version control history
+.gitignore                ← Files to exclude from git (e.g., .env, data/raw, venv)
+requirements.txt          ← Python dependencies and their versions
+README.md                 ← Project overview: what it does, how to run it
+src/
+  __init__.py             ← Makes src/ importable as a package
+  config.py               ← Config loader (reads .env, defines paths)
+  fetch/                  ← Fetchers: HTTP calls and web scraping
+    __init__.py
+    http.py               ← Polite HTTP helper (retries, headers, timeouts)
+    pokeapi.py            ← PokéAPI calls (public REST API)
+    pikalytics.py         ← Pikalytics scraper
+    scrape.py             ← Caching & throttling layer (used by all fetchers)
+  transform/              ← Transformers: data cleaning, aggregation, joins
+    __init__.py
+    build_dataset.py      ← Main data pipeline
+    pikalytics.py         ← Parse Pikalytics HTML into DataFrames
+    cores.py              ← Team co-occurrence analysis
+    movesets.py           ← Movesheet extraction
+  viz/                    ← Visualizers: Plotly chart builders (pure functions)
+    __init__.py
+    usage.py              ← Usage rank charts
+data/
+  raw/                    ← Raw API responses and scraped HTML (git-ignored)
+  processed/              ← Clean parquets/CSVs the dashboard reads (git-tracked)
+notebooks/                ← Exploratory Jupyter notebooks (scratch work)
+tests/                    ← Pytest unit and integration tests
+.streamlit/
+  config.toml             ← Streamlit theme, server config
+```
+
+### Why this structure?
+
+**Separation of concerns**: each folder has one job.
+- `fetch/` = I/O. Talks to the outside world.
+- `transform/` = Logic. Cleans, joins, derives.
+- `viz/` = Presentation. Turns data into pictures.
+- `tests/` = Confidence. Catches regressions.
+
+This keeps `app.py` thin and readable, and lets you **reuse, test, and swap**
+each layer independently.
+
+---
+
+### Folder purposes in detail
+
+#### `src/fetch/`
+
+Talks to the network. Responsible for:
+- HTTP calls to public APIs (`pokeapi.py`).
+- Web scraping with politeness checks (`pikalytics.py`).
+- Retries, headers, timeouts (`http.py`).
+- Disk caching so you don't re-fetch needlessly (`scrape.py`).
+
+**Convention**: each fetcher is a module that exports one or two functions.
+`fetch_pokemon()`, `fetch_champions_html()`. Always return the raw response
+(JSON dict or HTML string) — don't transform here.
+
+#### `src/transform/`
+
+Cleans and joins data. Responsible for:
+- Parsing HTML/JSON into DataFrames.
+- Normalizing names, handling nulls.
+- Merging datasets on key columns.
+- Deriving analytics (team cores, movesheet stats).
+
+**Convention**: functions take DataFrames, return DataFrames. Pure logic,
+no I/O (no API calls, no file writes inside here — except the final parquet
+save in `build_dataset.py`).
+
+#### `src/viz/`
+
+Builds Plotly charts. Responsible for:
+- Converting DataFrames into `Figure` objects.
+- Layout, colors, labels, interactivity.
+- Nothing else.
+
+**Convention**: `(df: DataFrame) -> Figure`. No I/O, no Streamlit calls inside
+viz functions. The Streamlit layer calls them and handles caching/rendering.
+
+#### `data/raw/`
+
+Staging area for unprocessed responses. Git-ignored.
+- Save every HTTP response (HTML, JSON) to disk with a cache key.
+- Makes development fast (re-parse offline without re-hitting the server).
+- Useful for debugging: "Why did my parser fail?" → inspect the raw data.
+
+#### `data/processed/`
+
+The truth. Git-tracked parquets and CSVs.
+- Output of the data pipeline (`build_dataset.py`).
+- What the dashboard actually reads.
+- If this is broken, the whole app is broken — so it's versioned.
+
+#### `notebooks/`
+
+Exploratory, throwaway work. Git-ignored (or tracked loosely).
+- Jupyter notebooks for `SELECT` queries, visual discovery.
+- Spike on a parsing strategy before moving it to `src/transform/`.
+- Not production code — don't import these from the app.
+
+#### `tests/`
+
+Automated confidence. Responsible for:
+- Unit tests for each `src/` module.
+- Data invariants (no nulls, no duplicates where they shouldn't be).
+- Smoke tests (can I load the app without errors?).
+
+**Convention**: `test_<module>.py` mirrors `src/<module>.py`. Run with `pytest`.
+
+---
+
+### How to approach a project
+
+#### 1. **Start with structure, not code**
+
+Before opening the editor, sketch the folder layout and data flow:
+```
+Does data come from the network?  → fetch/
+Does data need cleaning?          → transform/
+Does data become a chart?         → viz/
+Does the app render the chart?    → app.py
+```
+
+This prevents "spaghetti" — code that does fetching, transforming, and
+rendering all in one file.
+
+#### 2. **Build bottom-up**
+
+- **Layer 1**: `fetch/` — can I get the data? (Ignore cleanup for now.)
+- **Layer 2**: `transform/` — can I clean and join it?
+- **Layer 3**: `viz/` — can I plot it?
+- **Layer 4**: `app.py` — can I serve it to a user?
+
+Test each layer in isolation (even in a REPL) before moving up.
+
+#### 4. **Think in stages: raw → processed**
+
+Never overwrite raw data. Pipeline:
+1. **Fetch** → save to `data/raw/` (as JSON/HTML).
+2. **Transform** → read from raw, save to `data/processed/` (as Parquet).
+3. **Visualize** → read from processed, render in Streamlit.
+
+If step 2 breaks, you can re-run it without re-fetching. If step 3 breaks,
+you can debug the processed file in a notebook.
+
+#### 5. **Separate I/O from logic**
+
+```python
+# ❌ BAD: mixing I/O and logic
+def analyze_usage():
+    response = requests.get(...)  # I/O
+    df = pd.DataFrame(response.json())
+    df["pct"] = df["count"] / df["count"].sum()  # Logic
+    df.to_parquet("output.parquet")  # I/O
+    return df
+
+# ✅ GOOD: logic is pure, I/O at the edges
+def normalize_usage(df: DataFrame) -> DataFrame:
+    df["pct"] = df["count"] / df["count"].sum()
+    return df
+
+def load_usage():
+    response = requests.get(...)
+    return normalize_usage(pd.DataFrame(response.json()))
+```
+
+Pure functions are testable, reusable, debuggable.
+
+---
+
+### Good project etiquette
+
+#### **Git discipline**
+
+- **Commit early, often, meaningfully**: "Add PokéAPI fetch" not "Fix stuff".
+- **Never commit secrets**: use `.env` and `.gitignore`.
+- **Never commit generated data**: `data/raw/` is git-ignored; `data/processed/`
+  might be large — consider `.gitattributes` or DVC later.
+- **Write a brief commit message**: "Task 1.2: add get_pokemon() with retries"
+  tells the story.
+
+#### **Code organization**
+
+- **One responsibility per module**: don't mix fetch and transform logic.
+- **Type hints**: `def get_pokemon(name: str) -> dict:` is self-documenting.
+- **Docstrings**: explain the *why*, not the *what*. Names cover "what."
+- **Test your transformations**: if `df.merge(...)` is wrong, everything breaks.
+
+#### **Naming**
+
+- **Be boring**: `pokemon_index`, `usage_pct`, `top_n` are better than `poks`,
+  `u_perct`, `get_best`.
+- **Avoid abbreviations** unless they're universal (CSV, JSON, API).
+- **Commit messages in imperative**: "Add config loader" not "Added..." or "Adds...".
+
+#### **Performance & politeness**
+
+- **Disk cache every network call**: respect servers, speed up your dev loop.
+- **Sleep between requests**: 1–2 seconds is polite. Some servers check
+  `User-Agent`; respond with yours
+- **Fail loudly and early**: an `assert` in `tests/` catches bugs before production.
+- **Log what matters**: in a scraper, print which URL you're hitting and whether
+  it was cached.
+
+#### **Documentation**
+
+- **README**: what the project does, how to run it, who to contact.
+- **Docstrings in code**: especially on public functions in `src/`.
+- **Comments for "why"**: "we normalize names because Pikalytics uses dashes, PokéAPI
+  uses underscores."
+
+---
+
+### Workflow: from idea to dashboard
+
+1. **Idea** ("I want to plot Champions usage")
+   → **Structure** (sketch folder layout)
+   → **Spike** (rough notebook to validate the data exists)
+   → **Build bottom-up** (fetch → transform → viz → app)
+   → **Test** (assertions, edge cases)
+   → **Polish** (error messages, empty states, theme)
+
+2. Each layer is testable *before* the next layer is built.
+   - Can't plan the UI until you know what data will be there.
+   - Can't know what data is there until you've scraped and cleaned it.
+   - Can't scrape until you've checked what formats are available.
+
+3. **Commit often**: at the end of each task, even if incomplete. Marks progress
+   and reverting mistakes is easy.
+
+---
+
+### When (and how) to break these rules
+
+- **A quick script** (one-off CLI tool, data audit): no separation needed.
+  Just get it done.
+- **A prototype** (proving a concept in a notebook): don't worry about
+  `src/` structure yet. Once it works, port it.
+- **A learning project** (this one): follow the rules closely — they're the
+  *learning itself*.
+
+---
+
 ## Chapter 1 — Gather data
 
 The dashboard needs two kinds of data:
