@@ -41,7 +41,5 @@ def check_directories(create_if_missing: bool = True) -> None:
             if not directory.exists():
                 print(f"Directory {directory} does not exist. Creating it.")
                 directory.mkdir(parents=True, exist_ok=True)
-        
-check_directories()
 
 # %%
